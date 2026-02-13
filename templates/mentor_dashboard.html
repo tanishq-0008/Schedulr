@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentor Dashboard - Schedulr</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="dashboard-header">
+            <h1>Mentor Dashboard</h1>
+            <div class="header-actions">
+                <span class="welcome-text">Welcome, {{ user.username }}</span>
+                <a href="{{ url_for('login') }}" class="btn btn-secondary">Logout</a>
+            </div>
+        </header>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <div class="dashboard-content">
+            <!-- Mentor code for sharing with students -->
+            <section class="mentor-code-section">
+                <h2>Your Mentor Code</h2>
+                <p class="mentor-code-display">{{ user.mentor_code or 'N/A' }}</p>
+                <small>Share this code with your students so they can link their accounts to you.</small>
+            </section>
+
+            <!-- Study Units/Topics Management -->
+            <section class="sessions-section">
+                <h2>Study Units & Topics</h2>
+                <form method="POST" action="{{ url_for('add_unit') }}" class="unit-form form-section">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="subject">Subject:</label>
+                            <input type="text" id="subject" name="subject" required placeholder="e.g. Mathematics">
+                        </div>
+                        <div class="form-group">
+                            <label for="unit_name">Unit Name:</label>
+                            <input type="text" id="unit_name" name="unit_name" required placeholder="e.g. Unit 1">
+                        </div>
+                        <div class="form-group">
+                            <label for="topic_name">Topic Name:</label>
+                            <input type="text" id="topic_name" name="topic_name" required placeholder="e.g. Algebra Basics">
+                        </div>
+                        <div class="form-group form-group-btn">
+                            <button type="submit" class="btn btn-primary">Add Unit</button>
+                        </div>
+                    </div>
+                </form>
+                {% if units %}
+                <div class="units-table-container">
+                    <table class="sessions-table">
+                        <thead>
+                            <tr>
+                                <th>Subject</th>
+                                <th>Unit</th>
+                                <th>Topic</th>
+                                <th>Exam Date</th>
+                                <th>Test</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for unit in units %}
+                            <tr>
+                                <td>{{ unit.subject }}</td>
+                                <td>{{ unit.unit_name }}</td>
+                                <td>{{ unit.topic_name }}</td>
+                                <td>
+                                    {% set ex = exams_by_unit.get(unit.id) %}
+                                    {% if ex %}
+                                        {{ ex.exam_date[:10] }}
+                                        <form method="POST" action="{{ url_for('set_exam', unit_id=unit.id) }}" class="inline-exam-form">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <input type="datetime-local" name="exam_date" value="{{ ex.exam_date[:16] }}" required>
+                                            <button type="submit" class="btn btn-small">Update</button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('delete_exam', unit_id=unit.id) }}" style="display:inline;" onsubmit="return confirm('Remove exam date?');">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <button type="submit" class="btn btn-small btn-danger">Remove</button>
+                                        </form>
+                                    {% else %}
+                                        <form method="POST" action="{{ url_for('set_exam', unit_id=unit.id) }}" class="inline-exam-form">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <input type="datetime-local" name="exam_date" required>
+                                            <button type="submit" class="btn btn-small btn-primary">Set Exam</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set t = tests_by_unit.get(unit.id) %}
+                                    {% if t %}
+                                        {{ t.test_title }}
+                                        <a href="{{ url_for('edit_test_page', test_id=t.id, user_id=user.id) }}" class="btn btn-small">Edit Test</a>
+                                        <form method="POST" action="{{ url_for('delete_test', test_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this test?');">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <button type="submit" class="btn btn-small btn-danger">Delete Test</button>
+                                        </form>
+                                    {% else %}
+                                        <a href="{{ url_for('add_test_page', unit_id=unit.id, user_id=user.id) }}" class="btn btn-small btn-primary">+ Add Test</a>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('edit_unit_page', unit_id=unit.id, user_id=user.id) }}" class="btn btn-small btn-primary">Edit</a>
+                                    <form method="POST" action="{{ url_for('delete_unit', unit_id=unit.id) }}" style="display:inline;" onsubmit="return confirm('Delete this unit?');">
+                                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                                        <button type="submit" class="btn btn-small btn-danger">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="no-sessions">No units yet. Add one above.</p>
+                {% endif %}
+            </section>
+
+            <!-- Students' Progress & Test Results -->
+            <section class="sessions-section">
+                <h2>Students' Progress & Test Results</h2>
+                {% if progress_list %}
+                <div class="table-container">
+                    <table class="sessions-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Unit (Subject / Topic)</th>
+                                <th>Completed</th>
+                                <th>Test Taken</th>
+                                <th>Score</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in progress_list %}
+                            <tr class="{% if p.test_score is not none and p.test_score < 70 %}struggling-row{% endif %}">
+                                <td><strong>{{ p.student_name }}</strong></td>
+                                <td>{{ p.subject }}: {{ p.unit_name }} - {{ p.topic_name }}</td>
+                                <td>{{ 'Yes' if p.completed else 'No' }}</td>
+                                <td>{{ 'Yes' if p.test_taken else 'No' }}</td>
+                                <td>{{ p.test_score if p.test_score is not none else '-' }}{% if p.test_score is not none %}%{% endif %}</td>
+                                <td>
+                                    {% if p.test_score is not none and p.test_score < 70 %}
+                                    <span class="struggling-badge">Needs review</span>
+                                    {% elif p.difficulty_level %}
+                                    <span class="difficulty-badge {{ p.difficulty_level }}">{{ p.difficulty_level }}</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="no-sessions">No progress recorded yet.</p>
+                {% endif %}
+            </section>
+
+            <!-- Summary Statistics -->
+            <section class="stats-section">
+                <h2>Summary Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>{{ completed_count }}</h3>
+                        <p>Completed Sessions</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>{{ pending_count }}</h3>
+                        <p>Pending Sessions</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>{{ completed_count + pending_count }}</h3>
+                        <p>Total Sessions</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- All Students' Sessions -->
+            <section class="sessions-section">
+                <h2>All Students' Study Sessions</h2>
+                {% if sessions %}
+                    <div class="table-container">
+                        <table class="sessions-table">
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Subject</th>
+                                    <th>Scheduled Time</th>
+                                    <th>Notes</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in sessions %}
+                                    <tr class="{% if session.completed %}completed-row{% endif %}">
+                                        <td><strong>{{ session.student_name }}</strong></td>
+                                        <td>{{ session.subject }}</td>
+                                        <td>{{ session.start_time.replace('T', ' ') }}</td>
+                                        <td>{{ session.notes or '-' }}</td>
+                                        <td>
+                                            <span class="status-badge {% if session.completed %}completed{% else %}pending{% endif %}">
+                                                {% if session.completed %}Completed{% else %}Pending{% endif %}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="no-sessions">No study sessions found.</p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+    
+    <script>
+        // Optional: Add sorting functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const table = document.querySelector('.sessions-table');
+            if (table) {
+                const headers = table.querySelectorAll('th');
+                headers.forEach((header, index) => {
+                    header.style.cursor = 'pointer';
+                    header.addEventListener('click', function() {
+                        sortTable(table, index);
+                    });
+                });
+            }
+        });
+        
+        function sortTable(table, columnIndex) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            const sorted = rows.sort((a, b) => {
+                const aText = a.cells[columnIndex].textContent.trim();
+                const bText = b.cells[columnIndex].textContent.trim();
+                return aText.localeCompare(bText);
+            });
+            
+            sorted.forEach(row => tbody.appendChild(row));
+        }
+    </script>
+</body>
+</html>

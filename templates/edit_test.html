@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Test - Schedulr</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="dashboard-header">
+            <h1>Edit Test</h1>
+            <a href="{{ url_for('mentor_dashboard', user_id=user.id) }}" class="btn btn-secondary">Back to Dashboard</a>
+        </header>
+        <div class="form-section test-builder">
+            <h2>Test for {{ test.subject }}: {{ test.unit_name }} - {{ test.topic_name }}</h2>
+            <form method="POST" action="{{ url_for('edit_test', test_id=test.id) }}" id="test-form">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="hidden" name="question_count" id="question_count" value="{{ questions|length }}">
+
+                <div class="form-group">
+                    <label for="test_title">Test Title:</label>
+                    <input type="text" id="test_title" name="test_title" value="{{ test.test_title or 'Test' }}" placeholder="e.g. Unit 1 Quiz">
+                </div>
+
+                <div id="questions-container">
+                    {% for q in questions %}
+                    <div class="question-block builder-question" data-index="{{ loop.index0 }}">
+                        <div class="question-header">
+                            <span class="question-number">Q{{ loop.index }}</span>
+                            <button type="button" class="btn btn-small btn-danger remove-question">Remove</button>
+                        </div>
+                        <div class="form-group">
+                            <label>Question Text:</label>
+                            <input type="text" name="question_{{ loop.index0 }}_text" required value="{{ q.question_text }}" placeholder="Enter your question">
+                        </div>
+                        <div class="form-group">
+                            <label>Type:</label>
+                            <select name="question_{{ loop.index0 }}_type" class="question-type-select">
+                                <option value="MCQ" {% if q.type == 'MCQ' %}selected{% endif %}>Multiple Choice</option>
+                                <option value="ShortAnswer" {% if q.type == 'ShortAnswer' %}selected{% endif %}>Short Answer</option>
+                            </select>
+                        </div>
+                        <div class="mcq-options" style="display: {% if q.type == 'MCQ' %}block{% else %}none{% endif %};">
+                            <label>Options (select correct answer):</label>
+                            <div class="options-list">
+                                {% for opt in q.options %}
+                                <div class="option-row">
+                                    <label class="option-radio">
+                                        <input type="radio" name="question_{{ loop.parent.loop.index0 }}_correct" value="{{ loop.index0 }}" {% if opt.is_correct %}checked{% endif %}>
+                                        <input type="text" name="question_{{ loop.parent.loop.index0 }}_option_{{ loop.index0 }}" required value="{{ opt.option_text }}" placeholder="Option text">
+                                    </label>
+                                    <button type="button" class="btn btn-small btn-danger remove-option">x</button>
+                                </div>
+                                {% endfor %}
+                                {% if q.type == 'MCQ' and not q.options %}
+                                <div class="option-row">
+                                    <label class="option-radio">
+                                        <input type="radio" name="question_{{ loop.index0 }}_correct" value="0" required>
+                                        <input type="text" name="question_{{ loop.index0 }}_option_0" required placeholder="Option text">
+                                    </label>
+                                    <button type="button" class="btn btn-small btn-danger remove-option">x</button>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <button type="button" class="btn btn-small add-option">+ Add Option</button>
+                        </div>
+                        <div class="short-answer-field" style="display: {% if q.type == 'ShortAnswer' %}block{% else %}none{% endif %};">
+                            <label>Correct Answer:</label>
+                            <input type="text" name="question_{{ loop.index0 }}_answer" value="{{ q.correct_answer or '' }}" placeholder="Expected answer for grading">
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" id="add-question-btn" class="btn btn-secondary">+ Add Question</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let questionIndex = {{ questions|length }};
+
+        function getQuestionIndex(block) {
+            const container = document.getElementById('questions-container');
+            return Array.from(container.children).indexOf(block);
+        }
+
+        function addQuestion() {
+            const container = document.getElementById('questions-container');
+            const idx = questionIndex++;
+            const block = document.createElement('div');
+            block.className = 'question-block builder-question';
+            block.dataset.index = idx;
+            block.innerHTML = `
+                <div class="question-header">
+                    <span class="question-number">Q${container.children.length + 1}</span>
+                    <button type="button" class="btn btn-small btn-danger remove-question">Remove</button>
+                </div>
+                <div class="form-group">
+                    <label>Question Text:</label>
+                    <input type="text" name="question_${idx}_text" required placeholder="Enter your question">
+                </div>
+                <div class="form-group">
+                    <label>Type:</label>
+                    <select name="question_${idx}_type" class="question-type-select">
+                        <option value="MCQ">Multiple Choice</option>
+                        <option value="ShortAnswer">Short Answer</option>
+                    </select>
+                </div>
+                <div class="mcq-options">
+                    <label>Options (select correct answer):</label>
+                    <div class="options-list"></div>
+                    <button type="button" class="btn btn-small add-option">+ Add Option</button>
+                </div>
+                <div class="short-answer-field" style="display: none;">
+                    <label>Correct Answer:</label>
+                    <input type="text" name="question_${idx}_answer" placeholder="Expected answer for grading">
+                </div>
+            `;
+            block.querySelector('.add-option').addEventListener('click', function() {
+                const qIdx = getQuestionIndex(block);
+                const optList = block.querySelector('.options-list');
+                const optIdx = optList.querySelectorAll('.option-row').length;
+                const row = document.createElement('div');
+                row.className = 'option-row';
+                row.innerHTML = `
+                    <label class="option-radio">
+                        <input type="radio" name="question_${qIdx}_correct" value="${optIdx}">
+                        <input type="text" name="question_${qIdx}_option_${optIdx}" required placeholder="Option text">
+                    </label>
+                    <button type="button" class="btn btn-small btn-danger remove-option">x</button>
+                `;
+                row.querySelector('.remove-option').onclick = function() {
+                    if (optList.querySelectorAll('.option-row').length > 1) row.remove();
+                };
+                optList.appendChild(row);
+            });
+            block.querySelector('.question-type-select').addEventListener('change', function() {
+                const isMCQ = this.value === 'MCQ';
+                block.querySelector('.mcq-options').style.display = isMCQ ? 'block' : 'none';
+                block.querySelector('.short-answer-field').style.display = isMCQ ? 'none' : 'block';
+                block.querySelectorAll('.mcq-options input[type="text"]').forEach(i => i.required = isMCQ);
+                block.querySelector('.short-answer-field input').required = !isMCQ;
+            });
+            block.querySelector('.remove-question').addEventListener('click', function() {
+                block.remove();
+                renumberQuestions();
+            });
+            const optList = block.querySelector('.options-list');
+            const row0 = document.createElement('div');
+            row0.className = 'option-row';
+            row0.innerHTML = `
+                <label class="option-radio">
+                    <input type="radio" name="question_${idx}_correct" value="0" required>
+                    <input type="text" name="question_${idx}_option_0" required placeholder="Option text">
+                </label>
+                <button type="button" class="btn btn-small btn-danger remove-option">x</button>
+            `;
+            row0.querySelector('.remove-option').onclick = function() {
+                if (optList.querySelectorAll('.option-row').length > 1) row0.remove();
+            };
+            optList.appendChild(row0);
+            container.appendChild(block);
+            document.getElementById('question_count').value = questionIndex;
+        }
+
+        function renumberQuestions() {
+            const blocks = document.querySelectorAll('#questions-container .builder-question');
+            questionIndex = blocks.length;
+            blocks.forEach((block, i) => {
+                block.dataset.index = i;
+                block.querySelector('.question-number').textContent = 'Q' + (i + 1);
+                block.querySelector('input[name*="_text"]').name = 'question_' + i + '_text';
+                block.querySelector('select[name*="_type"]').name = 'question_' + i + '_type';
+                block.querySelector('.short-answer-field input').name = 'question_' + i + '_answer';
+                block.querySelectorAll('.option-row').forEach((row, j) => {
+                    row.querySelector('input[type="radio"]').name = 'question_' + i + '_correct';
+                    row.querySelector('input[type="radio"]').value = String(j);
+                    row.querySelector('input[type="text"]').name = 'question_' + i + '_option_' + j;
+                });
+            });
+            document.getElementById('question_count').value = questionIndex;
+        }
+
+        document.querySelectorAll('.remove-question').forEach(btn => {
+            btn.addEventListener('click', function() { this.closest('.builder-question').remove(); renumberQuestions(); });
+        });
+        document.querySelectorAll('.remove-option').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const row = this.closest('.option-row');
+                if (row.parentElement.querySelectorAll('.option-row').length > 1) row.remove();
+            });
+        });
+        document.querySelectorAll('.question-type-select').forEach(sel => {
+            sel.addEventListener('change', function() {
+                const block = this.closest('.builder-question');
+                const isMCQ = this.value === 'MCQ';
+                block.querySelector('.mcq-options').style.display = isMCQ ? 'block' : 'none';
+                block.querySelector('.short-answer-field').style.display = isMCQ ? 'none' : 'block';
+            });
+        });
+        document.querySelectorAll('.add-option').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const block = this.closest('.builder-question');
+                const qIdx = getQuestionIndex(block);
+                const optList = block.querySelector('.options-list');
+                const optIdx = optList.querySelectorAll('.option-row').length;
+                const row = document.createElement('div');
+                row.className = 'option-row';
+                row.innerHTML = `
+                    <label class="option-radio">
+                        <input type="radio" name="question_${qIdx}_correct" value="${optIdx}">
+                        <input type="text" name="question_${qIdx}_option_${optIdx}" required placeholder="Option text">
+                    </label>
+                    <button type="button" class="btn btn-small btn-danger remove-option">x</button>
+                `;
+                row.querySelector('.remove-option').onclick = function() {
+                    if (optList.querySelectorAll('.option-row').length > 1) row.remove();
+                };
+                optList.appendChild(row);
+            });
+        });
+
+        document.getElementById('add-question-btn').addEventListener('click', addQuestion);
+
+        document.getElementById('test-form').addEventListener('submit', function(e) {
+            const count = document.querySelectorAll('#questions-container .builder-question').length;
+            if (count === 0) { e.preventDefault(); alert('Add at least one question.'); return false; }
+            document.getElementById('question_count').value = count;
+        });
+    </script>
+</body>
+</html>
